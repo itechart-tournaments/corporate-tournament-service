@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"errors"
 )
 
 // AddAccount adds account email to db. It returns id of this account.
@@ -14,12 +13,9 @@ INSERT INTO accounts (email)
 	if err != nil {
 		return 0, err
 	}
-	rows, err := insert.RowsAffected()
+	id, err := insert.LastInsertId()
 	if err != nil {
 		return 0, err
 	}
-	if rows == 0 {
-		return 0, errors.New("no rows affected")
-	}
-	return 0, nil
+	return uint(id), nil
 }

@@ -20,11 +20,11 @@ type Service interface {
 	// AddToken adds email with token to db and sets expiration time.
 	AddToken(ctx context.Context, token string, email string, expTime time.Time) error
 
-	// VerifyToken checks for token in db and deletes it. It returns email. If token wasn't found,
+	// ProcessToken checks for token in db and deletes it. It returns email. If token wasn't found,
 	// it returns ErrNotFound.
-	VerifyToken(ctx context.Context, token string) (string, error)
+	ProcessToken(ctx context.Context, token string) (string, error)
 
-	// DeleteTokensByExpTimee deletes all tokens, that expired.
+	// DeleteTokensByExpTime deletes all tokens, that expired.
 	DeleteTokensByExpTime(ctx context.Context, token string) error
 
 	// AddAccount adds account email to db. It returns id of this account.

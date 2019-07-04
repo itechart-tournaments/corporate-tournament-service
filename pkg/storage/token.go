@@ -29,8 +29,8 @@ INSERT INTO emails_tokens (token,email,exp_at)
 	return nil
 }
 
-// VerifyToken checks for token in db and deletes it. It returns email. If token wasn't found, it returns ErrNotFound.
-func (db *DB) VerifyToken(ctx context.Context, token string) (string, error) {
+// ProcessToken checks for token in db and deletes it. It returns email. If token wasn't found, it returns ErrNotFound.
+func (db *DB) ProcessToken(ctx context.Context, token string) (string, error) {
 	tx, err := db.conn.BeginTxx(ctx, nil)
 	if err != nil {
 		return "", fmt.Errorf("couldn't start transation: %s", err)
@@ -47,7 +47,7 @@ SELECT email
 	if err != nil {
 		return "", fmt.Errorf("couldn't get token: %s", err)
 	}
-	_, err = tx.ExecContext(ctx, `
+	_, err = tx.ExecContext(ctx, ` 
 DELETE FROM emails_tokens
       WHERE token = ?
 	`, token)
@@ -58,7 +58,7 @@ DELETE FROM emails_tokens
 }
 
 // DeleteTokensByExpTime deletes all tokens, that expired.
-func (db *DB) DeleteTokensByExpTime(ctx context.Context, token string) error {
+func (db *DB) DeleteTokensByExpTime(ctx context.Context) error {
 	delete, err := db.conn.ExecContext(ctx, `
 	DELETE FROM emails_tokens
 	WHERE CURRENT_TIMESTAMP >= exp_at
