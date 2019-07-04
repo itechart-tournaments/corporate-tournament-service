@@ -19,7 +19,7 @@ INSERT INTO accounts (email)
 		return 0, err
 	}
 	if rows == 0 {
-		return 0, errors.New("No rows affected")
+		return 0, errors.New("no rows affected")
 	}
 	return 0, nil
 }
