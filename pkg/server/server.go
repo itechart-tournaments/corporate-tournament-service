@@ -5,32 +5,33 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/smtp"
-	"os"
 	"strconv"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/corporate-tournament-service/pkg/cts"
 	"github.com/gorilla/mux"
 	uuid "github.com/satori/go.uuid"
 )
 
-// TODO: make struct and init via config
-const (
-	port              = "PORT"
-	userEnvVar        = "DB_USER"
-	passEnvVar        = "DB_PASS"
-	dbNameEnvVar      = "DB_NAME"
-	senderEmail       = "SENDER_EMAIL"
-	senderEmailPasswd = "SENDER_EMAIL_PASSWD"
-	smtpHost          = "SMTP_HOST"
-	smtpPort          = "SMTP_PORT"
-	privateToken      = "PRIVATE_TOKEN"
-	regTokenExpTime   = "REG_TOKEN_EXP_TIME"
-	regURL            = "REG_URL"
-)
+type config struct {
+	DBConnPort        string `yaml:"db_conn_port"`
+	DBUser            string `yaml:"db_user"`
+	DBPasswd          string `yaml:"db_pass"`
+	DBName            string `yaml:"db_name"`
+	SenderEmail       string `yaml:"sender_email"`
+	SenderEmailPasswd string `yaml:"sender_email_passwd"`
+	smtpHost          string `yaml:"smtp_host"`
+	smtpPort          string `yaml:"smtp_port"`
+	privateKey        string `yaml:"private_key"`
+	regTokenExpTime   string `yaml:"private_key"`
+	apiURL            string `yaml:"api_url"`
+}
 
 // Server represents а server in corporate tournament service.
 type Server struct {
@@ -38,8 +39,21 @@ type Server struct {
 	service cts.Service
 }
 
+var conf config
+
 // NewServer constructs a Server and inits variables from config.
 func NewServer(db cts.Service) *Server {
+
+	yamlConfigFile, err := ioutil.ReadFile("config.yaml")
+	if err != nil {
+		log.Printf("error opening cofiguration yaml file: %s", err.Error())
+	}
+
+	err = yaml.Unmarshal(yamlConfigFile, &conf)
+	if err != nil {
+		log.Printf("error unmarshal yaml configuration file: %s", err.Error())
+	}
+
 	router := mux.NewRouter()
 
 	secureRouter := router.PathPrefix("/api").Subrouter()
@@ -67,9 +81,7 @@ func (s *Server) signIn(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// TODO: get regTokenExpTimeStr from struct field init via config
-	regTokenExpTimeStr := os.Getenv(regTokenExpTime)
-	regTokenExpTimeInt, err := strconv.ParseInt(regTokenExpTimeStr, 10, 64)
+	regTokenExpTime, err := strconv.ParseInt(conf.regTokenExpTime, 10, 64)
 	if err != nil {
 		log.Printf("wrong token expiration time provided: %s", err.Error())
 		return
@@ -89,7 +101,7 @@ func (s *Server) signIn(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	expTime := time.Now().UTC().Add(time.Minute * time.Duration(regTokenExpTimeInt))
+	expTime := time.Now().UTC().Add(time.Minute * time.Duration(regTokenExpTime))
 
 	err = s.service.AddToken(req.Context(), token.String(), user.Email, expTime)
 	if err != nil {
@@ -110,6 +122,7 @@ func (s *Server) login(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Do i need to pass here w and req?
 	err := s.service.Transactional(verifyToken(s.service, token))
 }
 
@@ -140,17 +153,17 @@ func sendTokenToEmail(emailTo, token string) error {
 		Token           string
 		RegTokenExpTime string
 	}{
-		RegURL:          regURL,
+		RegURL:          conf.apiURL,
 		Token:           token,
-		RegTokenExpTime: regTokenExpTime,
+		RegTokenExpTime: conf.regTokenExpTime,
 	})
 
 	// TODO: get senderEmail, senderEmailPasswd, smtpHost from struct field init via config
-	auth := smtp.PlainAuth("", senderEmail, senderEmailPasswd, smtpHost)
+	auth := smtp.PlainAuth("", conf.SenderEmail, conf.SenderEmailPasswd, conf.smtpHost)
 
 	//sprintf html template static
 
-	err = smtp.SendMail(fmt.Sprintf("%s:%s", smtpHost, smtpPort), auth, senderEmail, []string{emailTo}, emailBody.Bytes())
+	err = smtp.SendMail(fmt.Sprintf("%s:%s", conf.smtpHost, conf.smtpPort), auth, conf.SenderEmail, []string{emailTo}, emailBody.Bytes())
 	if err != nil {
 		return fmt.Errorf("error sending email: %s", err.Error())
 	}
@@ -172,7 +185,7 @@ func verifyToken(s cts.Service, token string) func(s cts.Service) error {
 			return
 		}
 
-		accountID, err := s.service.AddAccount(req.Context(), email)
+		accountID, err := s.AddAccount(req.Context(), email)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			log.Printf("error adding account: %s", err.Error())
