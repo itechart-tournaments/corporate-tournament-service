@@ -196,9 +196,55 @@ func verifyToken(s cts.Service, token string) func(s cts.Service) error {
 	}
 }
 
+// Token is JWT claims struct
+type Token struct {
+	Email string `json:"email"`
+	jwt.StandardClaims
+}
+
 func jwtAuthentication(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		tokenHeader := req.Header.Get("Authorization")
 
+		if tokenHeader == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			log.Print("Missing auth token")
+			return
+		}
+
+		// The token normally comes in format `Bearer {token-body}`,
+		// we check if the retrieved token matched this requirement
+		splitted := strings.Split(tokenHeader, " ")
+		if len(splitted) != 2 {
+			w.WriteHeader(http.StatusForbidden)
+			log.Print("Invalid/Malformed auth token")
+			return
+		}
+
+		// Grab the token part, what we are truly interested in
+		tokenPart := splitted[1]
+		tk := &Token{}
+
+		token, err := jwt.ParseWithClaims(tokenPart, tk, func(token *jwt.Token) (interface{}, error) {
+			return []byte(conf.privateKey), nil
+		})
+
+		// Malformed token, returns with http code 403 as usual
+		if err != nil {
+			w.WriteHeader(http.StatusForbidden)
+			log.Print("Invalid/Malformed auth token")
+			return
+		}
+
+		// Token is invalid, maybe not signed on this server
+		if !token.Valid {
+			w.WriteHeader(http.StatusForbidden)
+			log.Print("Token is not valid")
+			return
+		}
+
+		// Proceed in the middleware chain
+		next.ServeHTTP(w, req)
 	})
 }
