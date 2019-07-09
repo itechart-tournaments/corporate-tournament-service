@@ -3,19 +3,23 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"net/smtp"
-	"strconv"
+	"regexp"
+	"strings"
 	"time"
+
+	"github.com/dgrijalva/jwt-go"
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/corporate-tournament-service/pkg/cts"
 	"github.com/gorilla/mux"
+	"github.com/itechart-tournaments/corporate-tournament-service/pkg/cts"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -43,23 +47,28 @@ type Server struct {
 
 var conf config
 
-// NewServer constructs a Server and inits variables from config.
+// NewServer constructs a Server, decodes yaml configuration file
+// and assigns decoded values to config struct.
 func NewServer(db cts.Service) *Server {
 
+	// TODO: make path of config.yaml more concrete
 	yamlConfigFile, err := ioutil.ReadFile("config.yaml")
 	if err != nil {
 		log.Printf("error opening cofiguration yaml file: %s", err.Error())
+		return nil
 	}
 
 	err = yaml.Unmarshal(yamlConfigFile, &conf)
 	if err != nil {
-		log.Printf("error unmarshal yaml configuration file: %s", err.Error())
+		log.Printf("error unmarshaling yaml configuration file: %s", err.Error())
+		return nil
 	}
 
 	router := mux.NewRouter()
 
 	secureRouter := router.PathPrefix("/api").Subrouter()
 	secureRouter.Use(jwtAuthentication)
+
 	s := Server{
 		service: db,
 		Handler: router,
@@ -83,36 +92,27 @@ func (s *Server) signIn(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	regTokenExpTime, err := strconv.ParseInt(conf.regTokenExpTime, 10, 64)
-	if err != nil {
-		log.Printf("wrong token expiration time provided: %s", err.Error())
-		return
-	}
-
 	token, err := uuid.NewV4()
-
 	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("error creating uuid: %s", err.Error())
 		return
 	}
 
 	err = sendTokenToEmail(user.Email, token.String())
-
 	if err != nil {
 		log.Printf("error sending email: %s", err.Error())
 		return
 	}
 
-	expTime := time.Now().UTC().Add(time.Minute * time.Duration(regTokenExpTime))
+	expTime := time.Now().UTC().Add(time.Minute * time.Duration(conf.RegTokenLifeTime))
 
-	err = s.service.AddToken(req.Context(), token.String(), user.Email, expTime)
+	err = s.service.AddToken(token.String(), user.Email, expTime)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "couldn't add token %s", err)
 		return
 	}
-
-	// TODO: create jwt access token and refresh token and send them
 }
 
 func (s *Server) login(w http.ResponseWriter, req *http.Request) {
@@ -124,12 +124,23 @@ func (s *Server) login(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Do i need to pass here w and req?
-	err := s.service.Transactional(verifyToken(s.service, token))
+	err := s.service.Transactional(req.Context(), verifyToken(token))
+
+	if err == cts.ErrNotFound {
+		w.WriteHeader(http.StatusNotFound)
+		log.Print(err.Error())
+		return
+	}
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Print(err.Error())
+		return
+	}
+
+	// TODO: create jwt access token and refresh token and send them both
 }
 
-// Welcome is function that checks if access token is written inside users cookie
-// and if it's valid
+// Welcome
 func (s *Server) welcome(w http.ResponseWriter, r *http.Request) {
 
 }
@@ -153,6 +164,7 @@ func createJWTAccessToken(email string) (string, error) {
 	}
 	return tokenString, nil
 }
+
 // sendTokenToEmail function validates given email using regExp,
 // parses template file and writes result body structure to email body.
 // Finally sendTokenToEmail function sends letter using smtp to address provided
@@ -198,26 +210,25 @@ func sendTokenToEmail(emailTo, token string) error {
 	return nil
 }
 
-func verifyToken(s cts.Service, token string) func(s cts.Service) error {
+func verifyToken(token string) func(s cts.Service) error {
 
 	return func(s cts.Service) error {
-		// TODO: get email here
 
-		if err == cts.ErrNotFound {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
+		email, err := s.GetEmail(token)
+
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
 			log.Printf("error verifying token: %s", err.Error())
-			return
+			return fmt.Errorf("error verifying token: %s", err.Error())
 		}
 
-		accountID, err := s.AddAccount(req.Context(), email)
+		// TODO: delete token from db
+
+		// Do we need to do smth with account id?
+		_, err = s.AddAccount(email)
+
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
 			log.Printf("error adding account: %s", err.Error())
-			return
+			return fmt.Errorf("error adding account: %s", err.Error())
 		}
 
 		return nil
@@ -271,6 +282,8 @@ func jwtAuthentication(next http.Handler) http.Handler {
 			log.Print("Token is not valid")
 			return
 		}
+
+		// TODO: Add ExpAt time validation here
 
 		// Proceed in the middleware chain
 		next.ServeHTTP(w, req)
