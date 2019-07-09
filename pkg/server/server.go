@@ -20,17 +20,19 @@ import (
 )
 
 type config struct {
-	DBConnPort        string `yaml:"db_conn_port"`
-	DBUser            string `yaml:"db_user"`
-	DBPasswd          string `yaml:"db_pass"`
-	DBName            string `yaml:"db_name"`
-	SenderEmail       string `yaml:"sender_email"`
-	SenderEmailPasswd string `yaml:"sender_email_passwd"`
-	smtpHost          string `yaml:"smtp_host"`
-	smtpPort          string `yaml:"smtp_port"`
-	privateKey        string `yaml:"private_key"`
-	regTokenExpTime   string `yaml:"private_key"`
-	apiURL            string `yaml:"api_url"`
+	DBConnPort           int64  `yaml:"db_conn_port"`
+	DBUser               string `yaml:"db_user"`
+	DBPasswd             string `yaml:"db_pass"`
+	DBName               string `yaml:"db_name"`
+	SenderEmail          string `yaml:"sender_email"`
+	SenderEmailPasswd    string `yaml:"sender_email_passwd"`
+	SMTPHost             string `yaml:"smtp_host"`
+	SMTPPort             int64  `yaml:"smtp_port"`
+	PrivateKey           string `yaml:"private_key"`
+	RegTokenLifeTime     int64  `yaml:"reg_token_life_time"`
+	AccessTokenLifeTime  int64  `yaml:"access_token_life_time"`
+	RefreshTokenLifeTime int64  `yaml:"refresh_token_life_time"`
+	APIURL               string `yaml:"api_url"`
 }
 
 // Server represents а server in corporate tournament service.
