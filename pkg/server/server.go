@@ -136,19 +136,28 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// sendTokenToEmail function validates given email using regExp,
+// parses template file and writes result body structure to email body.
+// Finally sendTokenToEmail function sends letter using smtp to address provided
+// by emailTo variable. If smth goes wrong corresponding error will be returned.
 func sendTokenToEmail(emailTo, token string) error {
-	// TODO: validate email with regexp
+
+	var validEmail = regexp.MustCompile(`[^@]+@[^@]+\.[^@]+`)
+	if !validEmail.MatchString(emailTo) {
+		return errors.New("email is not valid")
+	}
 
 	emailTemplate, err := template.ParseFiles("email-template.html")
+
 	if err != nil {
-		return fmt.Errorf("error parsing html template: %s", err.Error())
+		return fmt.Errorf("error parsing html template file: %s", err.Error())
 	}
 
 	headers := "MIME-version: 1.0;\nContent-Type: text/html;"
 	var emailBody bytes.Buffer
 	emailBody.Write([]byte(fmt.Sprintf("Subject: registration\n%s\n\n", headers)))
 
-	emailTemplate.Execute(&emailBody, struct {
+	err = emailTemplate.Execute(&emailBody, struct {
 		RegURL          string
 		Token           string
 		RegTokenExpTime string
@@ -158,15 +167,17 @@ func sendTokenToEmail(emailTo, token string) error {
 		RegTokenExpTime: conf.regTokenExpTime,
 	})
 
-	// TODO: get senderEmail, senderEmailPasswd, smtpHost from struct field init via config
-	auth := smtp.PlainAuth("", conf.SenderEmail, conf.SenderEmailPasswd, conf.smtpHost)
+	if err != nil {
+		return fmt.Errorf("error applying parsed template to the specified data object: %s", err.Error())
+	}
 
-	//sprintf html template static
+	auth := smtp.PlainAuth("", conf.SenderEmail, conf.SenderEmailPasswd, conf.smtpHost)
 
 	err = smtp.SendMail(fmt.Sprintf("%s:%s", conf.smtpHost, conf.smtpPort), auth, conf.SenderEmail, []string{emailTo}, emailBody.Bytes())
 	if err != nil {
 		return fmt.Errorf("error sending email: %s", err.Error())
 	}
+
 	return nil
 }
 
