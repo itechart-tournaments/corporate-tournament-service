@@ -136,6 +136,21 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func createJWTAccessToken(email string) (string, error) {
+	expTime := time.Now().UTC().Add(time.Minute * time.Duration(conf.AccessTokenLifeTime)).Unix()
+	tk := &Token{
+		Email: email,
+		jwt.StandardClaims{
+			ExpiresAt: expTime,
+		},
+	}
+	token := jwt.NewWithClaims(jwt.GetSigningMethod("HS256"), tk)
+	tokenString, err := token.SignedString([]byte(conf.privateKey))
+	if err != nil {
+		return "", fmt.Errorf("error create JWT access token: %s", err.Error())
+	}
+	return tokenString, nil
+}
 // sendTokenToEmail function validates given email using regExp,
 // parses template file and writes result body structure to email body.
 // Finally sendTokenToEmail function sends letter using smtp to address provided
