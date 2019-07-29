@@ -1,12 +1,8 @@
 package storage
 
-import (
-	"context"
-)
-
 // AddAccount adds account email to db. It returns id of this account.
-func (db *DB) AddAccount(ctx context.Context, email string) (uint, error) {
-	insert, err := db.conn.ExecContext(ctx, `
+func (db *DB) AddAccount(email string) (uint, error) {
+	insert, err := db.conn.Exec(`
 INSERT INTO accounts (email)
 	 VALUES(?,?)
 	`, email)

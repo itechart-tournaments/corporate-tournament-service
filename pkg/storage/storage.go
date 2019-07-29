@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 
 	"github.com/itechart-tournaments/corporate-tournament-service/pkg/cts"
@@ -24,12 +26,12 @@ func (db *DB) Close() {
 	db.conn.(*sqlx.DB).Close()
 }
 
-func (db *DB) Transactional(f func(s cts.Service) error) error {
+func (db *DB) Transactional(ctx context.Context, f func(s cts.Service) error) error {
 	sqlDB, ok := db.conn.(*sqlx.DB)
 	if !ok {
 		return errors.New("couldn't bring to DB")
 	}
-	tx, err := sqlDB.Beginx()
+	tx, err := sqlDB.BeginTxx(ctx, &sql.TxOptions{})
 	if err != nil {
 		return errors.New("couldn't start transaction")
 	}
@@ -43,5 +45,4 @@ func (db *DB) Transactional(f func(s cts.Service) error) error {
 	}()
 
 	return f(&DB{conn: tx})
-
 }

@@ -17,22 +17,22 @@ var ErrNotFound = errors.New("not found")
 
 // Service is the interface that wraps all interaction methods with db.
 type Service interface {
-	Transactional(f func(s Service) error) error
+	// Transactional is wrapper function for executing db queries in one transaction.
+	Transactional(ctx context.Context, f func(s Service) error) error
 
 	// AddToken adds email with token to db and sets expiration time.
-	AddToken(ctx context.Context, token string, email string, expTime time.Time) error
+	AddToken(token string, email string, expTime time.Time) error
 
-	//// ProcessToken checks for token in db and deletes it. It returns email. If token wasn't found,
-	//// it returns ErrNotFound.
-	//ProcessToken(ctx context.Context, token string) (string, error)
+	DeleteToken(token string) error
 
-	DeleteToken(ctx context.Context, token string) error
-
-	GetEmail(ctx context.Context, token string) (string, error)
+	// GetEmail finds email connected with given token.
+	// If email wasn't found, it returns ErrNotFound.
+	GetEmail(token string) (string, error)
 
 	// DeleteTokensByExpTime deletes all tokens, that expired.
-	DeleteTokensByExpTime(ctx context.Context) error
+	DeleteTokensByExpTime() error
 
-	// AddAccount adds account email to db. It returns id of this account.
-	AddAccount(ctx context.Context, email string) (uint, error)
+	// AddAccount adds account email to db.
+	// It returns id of the added account if succeed.
+	AddAccount(email string) (uint, error)
 }
